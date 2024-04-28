@@ -55,9 +55,26 @@ namespace CustomVendingMachines.Plugin
 				{
 					foreach (var data in datas)
 					{
+						Texture2D normaltex;
+						Texture2D outTex = null;
 						try
 						{
 							EnumExtensions.GetFromExtendedName<Items>(data.Value.itemName);
+							normaltex = AssetLoader.TextureFromFile(Path.Combine(data.Key, data.Value.normalTextureFileName));
+							if (normaltex.width != 128 || normaltex.height != 224)
+								throw new ArgumentException($"invalid texture: {normaltex.width}/{normaltex.height} | Expected size: 128/224 >> Texture Name: {data.Value.normalTextureFileName}");
+
+							if (data.Value.usesLeft > 0) // The out texture will be ignored if the vending machine has infinite uses (uses < 0 are considered infinite)
+							{
+								outTex = AssetLoader.TextureFromFile(Path.Combine(data.Key, data.Value.outOfStockFileName));
+								if (outTex.width != 128 || outTex.height != 224)
+									throw new ArgumentException($"invalid texture: {outTex.width}/{outTex.height} | Expected size: 128/224 >> Texture Name: {data.Value.outOfStockFileName}");
+							}
+						}
+						catch (ArgumentException e)
+						{
+							Debug.LogWarning($"BBCustomVendingMachines: Failed to load vending machine due to an {e.Message}");
+							continue;
 						}
 						catch
 						{
@@ -65,11 +82,9 @@ namespace CustomVendingMachines.Plugin
 							continue;
 						}
 
-						var sodaMachine = ObjectCreationExtensions.CreateSodaMachineInstance(
-							AssetLoader.TextureFromFile(Path.Combine(data.Key, data.Value.normalTextureFileName)), AssetLoader.TextureFromFile(Path.Combine(data.Key, data.Value.outOfStockFileName)));
+						var sodaMachine = ObjectCreationExtensions.CreateSodaMachineInstance(normaltex
+							, outTex);
 						// Include soda machine as a prefab of course, so it appears
-						sodaMachine.gameObject.SetActive(true);
-						sodaMachine.transform.position = Vector3.up * float.MaxValue;
 						sodaMachine.name = $"{data.Value.itemName}SodaMachine";
 						data.Value.machine = sodaMachine;
 						/*
@@ -80,6 +95,7 @@ namespace CustomVendingMachines.Plugin
 
 						var vendingMachineBuilder = new GameObject($"{data.Value.itemName}SodaMachineBuilder_{data.Value.normalTextureFileName}").AddComponent<GenericHallBuilder>();
 						DontDestroyOnLoad(vendingMachineBuilder.gameObject);
+						vendingMachineBuilder.gameObject.SetActive(false);
 
 						ObjectBuilderMetaStorage.Instance.Add(new(Info, vendingMachineBuilder));
 
@@ -92,6 +108,8 @@ namespace CustomVendingMachines.Plugin
 							);
 
 						sodaMachines.Add(new(new() { selection = vendingMachineBuilder, weight = data.Value.sodaMachineWeight }, data.Value));
+						prefabs.Add(sodaMachine.gameObject);
+						prefabs.Add(vendingMachineBuilder.gameObject);
 					}
 				}
 				catch (Exception e)
@@ -111,7 +129,8 @@ namespace CustomVendingMachines.Plugin
 					{
 
 						if (!machine.Value.IncludeInLevel(endless ? name + i.ToString() : name) || ld.specialHallBuilders.Contains(machine.Key)) continue;
-						machine.Value.machine.SetPotentialItemsAndUses(machine.Value.usesLeft, new WeightedItemObject() { selection = ItemMetaStorage.Instance.FindByEnum(EnumExtensions.GetFromExtendedName<Items>(machine.Value.itemName)).value, weight = 1 });
+						machine.Value.machine.SetPotentialItems(new WeightedItemObject() { selection = ItemMetaStorage.Instance.FindByEnum(EnumExtensions.GetFromExtendedName<Items>(machine.Value.itemName)).value, weight = 1 })
+						.SetUses(machine.Value.usesLeft);
 
 						ld.specialHallBuilders = ld.specialHallBuilders.AddToArray(machine.Key);
 						builders.Add(machine.Key);
@@ -141,6 +160,8 @@ namespace CustomVendingMachines.Plugin
 		readonly internal List<KeyValuePair<WeightedObjectBuilder, VendingMachineData>> sodaMachines = [];
 
 		readonly static List<KeyValuePair<string, VendingMachineData>> datas = [];
+
+		readonly static internal List<GameObject> prefabs = [];
 	}
 
 	[Serializable]
@@ -155,7 +176,7 @@ namespace CustomVendingMachines.Plugin
 		public string itemName = string.Empty;
 		public string[] allowedLevels = [];
 		public bool IncludeInLevel(string floor) => // A BUNCH OF CHECKS
-			!string.IsNullOrEmpty(normalTextureFileName) && !string.IsNullOrEmpty(outOfStockFileName) && usesLeft > 0 && minAmount >= 0 && maxAmount > 0 && minAmount <= maxAmount && sodaMachineWeight > 0 && allowedLevels.Contains(floor);
+			!string.IsNullOrEmpty(normalTextureFileName) && !string.IsNullOrEmpty(outOfStockFileName) && usesLeft != 0 && minAmount >= 0 && maxAmount > 0 && minAmount <= maxAmount && sodaMachineWeight > 0 && allowedLevels.Contains(floor);
 
 		[NonSerialized]
 		public SodaMachine machine;
@@ -192,5 +213,17 @@ namespace CustomVendingMachines.Plugin
 			Plugin.lastlevelnum = 1;
 			Plugin.builders.Clear();
 		}
+	}
+
+	[HarmonyPatch]
+	class PrefabActivation
+	{
+		[HarmonyPatch(typeof(GameInitializer), "Initialize")]
+		[HarmonyPrefix]
+		static void ActivateThem() => Plugin.prefabs.ForEach(x => x.SetActive(true));
+
+		[HarmonyPatch(typeof(BaseGameManager), "Initialize")]
+		[HarmonyPrefix]
+		static void DisableThem() => Plugin.prefabs.ForEach(x => x.SetActive(false));
 	}
 }
