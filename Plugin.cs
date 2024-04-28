@@ -14,6 +14,7 @@ namespace CustomVendingMachines.Plugin
 {
 	[BepInPlugin("pixelguy.pixelmodding.baldiplus.customvendingmachines", PluginInfo.PLUGIN_NAME, "1.0.0")]
 	[BepInDependency("mtm101.rulerp.bbplus.baldidevapi", BepInDependency.DependencyFlags.HardDependency)]
+	[BepInDependency("pixelguy.pixelmodding.baldiplus.pixelinternalapi", BepInDependency.DependencyFlags.HardDependency)]
 	public class Plugin : BaseUnityPlugin
 	{
 		// *** Use this method for your mod to add custom vending machines ***
