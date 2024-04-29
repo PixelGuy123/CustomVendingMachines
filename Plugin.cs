@@ -60,20 +60,33 @@ namespace CustomVendingMachines.Plugin
 						try
 						{
 							EnumExtensions.GetFromExtendedName<Items>(data.Value.itemName);
+
+							if (data.Value.usesLeft == 0) // Lotta of checks lol
+								throw new ArgumentException("the usesLeft being set to 0");
+							if (data.Value.minAmount < 0)
+								throw new ArgumentException("the minAmount being below 0");
+							if (data.Value.minAmount > data.Value.maxAmount)
+								throw new ArgumentException("the minAmount being higher than maxAmount");
+							if (data.Value.sodaMachineWeight < 0)
+								throw new ArgumentException("the sodaMachineWeight being below 0");
+
+							if (!File.Exists(Path.Combine(data.Key, data.Value.normalTextureFileName)))
+								throw new ArgumentException("a missing texture. Texture name: " + data.Value.normalTextureFileName);
+
 							normaltex = AssetLoader.TextureFromFile(Path.Combine(data.Key, data.Value.normalTextureFileName));
 							if (normaltex.width != 128 || normaltex.height != 224)
-								throw new ArgumentException($"invalid texture: {normaltex.width}/{normaltex.height} | Expected size: 128/224 >> Texture Name: {data.Value.normalTextureFileName}");
+								throw new ArgumentException($"an invalid texture: {normaltex.width}/{normaltex.height} | Expected size: 128/224 >> Texture Name: {data.Value.normalTextureFileName}");
 
 							if (data.Value.usesLeft > 0) // The out texture will be ignored if the vending machine has infinite uses (uses < 0 are considered infinite)
 							{
 								outTex = AssetLoader.TextureFromFile(Path.Combine(data.Key, data.Value.outOfStockFileName));
 								if (outTex.width != 128 || outTex.height != 224)
-									throw new ArgumentException($"invalid texture: {outTex.width}/{outTex.height} | Expected size: 128/224 >> Texture Name: {data.Value.outOfStockFileName}");
+									throw new ArgumentException($"an invalid texture: {outTex.width}/{outTex.height} | Expected size: 128/224 >> Texture Name: {data.Value.outOfStockFileName}");
 							}
 						}
 						catch (ArgumentException e)
 						{
-							Debug.LogWarning($"BBCustomVendingMachines: Failed to load vending machine due to an {e.Message}");
+							Debug.LogWarning($"BBCustomVendingMachines: Failed to load vending machine ({data.Value.itemName}) due to {e.Message}");
 							continue;
 						}
 						catch
@@ -83,9 +96,10 @@ namespace CustomVendingMachines.Plugin
 						}
 
 						var sodaMachine = ObjectCreationExtensions.CreateSodaMachineInstance(normaltex
-							, outTex);
+							,outTex);
 						// Include soda machine as a prefab of course, so it appears
 						sodaMachine.name = $"{data.Value.itemName}SodaMachine";
+						sodaMachine.gameObject.SetActive(false);
 						data.Value.machine = sodaMachine;
 						/*
 						and you want to know the solution i came up with?
@@ -176,7 +190,7 @@ namespace CustomVendingMachines.Plugin
 		public string itemName = string.Empty;
 		public string[] allowedLevels = [];
 		public bool IncludeInLevel(string floor) => // A BUNCH OF CHECKS
-			!string.IsNullOrEmpty(normalTextureFileName) && !string.IsNullOrEmpty(outOfStockFileName) && usesLeft != 0 && minAmount >= 0 && maxAmount > 0 && minAmount <= maxAmount && sodaMachineWeight > 0 && allowedLevels.Contains(floor);
+			allowedLevels.Contains(floor);
 
 		[NonSerialized]
 		public SodaMachine machine;
@@ -219,8 +233,12 @@ namespace CustomVendingMachines.Plugin
 	class PrefabActivation
 	{
 		[HarmonyPatch(typeof(GameInitializer), "Initialize")]
-		[HarmonyPrefix]
-		static void ActivateThem() => Plugin.prefabs.ForEach(x => x.SetActive(true));
+		[HarmonyPostfix]
+		static void ActivateThem(SceneObject ___sceneObject)
+		{ 
+			if (___sceneObject != null && ___sceneObject)
+				Plugin.prefabs.ForEach(x => x.SetActive(true)); 
+		}
 
 		[HarmonyPatch(typeof(BaseGameManager), "Initialize")]
 		[HarmonyPrefix]
