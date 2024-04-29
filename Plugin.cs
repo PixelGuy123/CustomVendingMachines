@@ -10,12 +10,12 @@ using System.IO;
 using System.Linq;
 using UnityEngine;
 
-namespace CustomVendingMachines.Plugin
+namespace CustomVendingMachines
 {
 	[BepInPlugin("pixelguy.pixelmodding.baldiplus.customvendingmachines", PluginInfo.PLUGIN_NAME, "1.0.0")]
 	[BepInDependency("mtm101.rulerp.bbplus.baldidevapi", BepInDependency.DependencyFlags.HardDependency)]
 	[BepInDependency("pixelguy.pixelmodding.baldiplus.pixelinternalapi", BepInDependency.DependencyFlags.HardDependency)]
-	public class Plugin : BaseUnityPlugin
+	public class CustomVendingMachinesPlugin : BaseUnityPlugin
 	{
 		// *** Use this method for your mod to add custom vending machines ***
 		public static void AddDataFromDirectory(string path)
@@ -224,8 +224,8 @@ namespace CustomVendingMachines.Plugin
 	{
 		private static void Prefix()
 		{
-			Plugin.lastlevelnum = 1;
-			Plugin.builders.Clear();
+			CustomVendingMachinesPlugin.lastlevelnum = 1;
+			CustomVendingMachinesPlugin.builders.Clear();
 		}
 	}
 
@@ -237,11 +237,11 @@ namespace CustomVendingMachines.Plugin
 		static void ActivateThem(SceneObject ___sceneObject)
 		{ 
 			if (___sceneObject != null && ___sceneObject)
-				Plugin.prefabs.ForEach(x => x.SetActive(true)); 
+				CustomVendingMachinesPlugin.prefabs.ForEach(x => x.SetActive(true)); 
 		}
 
 		[HarmonyPatch(typeof(BaseGameManager), "Initialize")]
 		[HarmonyPrefix]
-		static void DisableThem() => Plugin.prefabs.ForEach(x => x.SetActive(false));
+		static void DisableThem() => CustomVendingMachinesPlugin.prefabs.ForEach(x => x.SetActive(false));
 	}
 }
