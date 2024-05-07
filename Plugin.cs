@@ -5,6 +5,7 @@ using MTM101BaldAPI.AssetTools;
 using MTM101BaldAPI.Registers;
 using PixelInternalAPI.Extensions;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -14,7 +15,7 @@ namespace CustomVendingMachines
 {
 	[BepInDependency("mtm101.rulerp.bbplus.baldidevapi", BepInDependency.DependencyFlags.HardDependency)]
 	[BepInDependency("pixelguy.pixelmodding.baldiplus.pixelinternalapi", BepInDependency.DependencyFlags.HardDependency)]
-	[BepInPlugin("pixelguy.pixelmodding.baldiplus.customvendingmachines", PluginInfo.PLUGIN_NAME, "1.0.0")]
+	[BepInPlugin("pixelguy.pixelmodding.baldiplus.customvendingmachines", PluginInfo.PLUGIN_NAME, "1.0.1")]
 	public class CustomVendingMachinesPlugin : BaseUnityPlugin
 	{
 		// *** Use this method for your mod to add custom vending machines ***
@@ -49,89 +50,7 @@ namespace CustomVendingMachines
 
 			AddDataFromDirectory(AssetLoader.GetModPath(this)); // Read from the directory already
 
-			LoadingEvents.RegisterOnAssetsLoaded(() =>
-			{
-				try
-				{
-					foreach (var data in datas)
-					{
-						Texture2D normaltex;
-						Texture2D outTex = null;
-						try
-						{
-							EnumExtensions.GetFromExtendedName<Items>(data.Value.itemName);
-
-							if (data.Value.usesLeft == 0) // Lotta of checks lol
-								throw new ArgumentException("the usesLeft being set to 0");
-							if (data.Value.minAmount < 0)
-								throw new ArgumentException("the minAmount being below 0");
-							if (data.Value.minAmount > data.Value.maxAmount)
-								throw new ArgumentException("the minAmount being higher than maxAmount");
-							if (data.Value.sodaMachineWeight < 0)
-								throw new ArgumentException("the sodaMachineWeight being below 0");
-
-							if (!File.Exists(Path.Combine(data.Key, data.Value.normalTextureFileName)))
-								throw new ArgumentException("a missing texture. Texture name: " + data.Value.normalTextureFileName);
-
-							normaltex = AssetLoader.TextureFromFile(Path.Combine(data.Key, data.Value.normalTextureFileName));
-							if (normaltex.width != 128 || normaltex.height != 224)
-								throw new ArgumentException($"an invalid texture: {normaltex.width}/{normaltex.height} | Expected size: 128/224 >> Texture Name: {data.Value.normalTextureFileName}");
-
-							if (data.Value.usesLeft > 0) // The out texture will be ignored if the vending machine has infinite uses (uses < 0 are considered infinite)
-							{
-								outTex = AssetLoader.TextureFromFile(Path.Combine(data.Key, data.Value.outOfStockFileName));
-								if (outTex.width != 128 || outTex.height != 224)
-									throw new ArgumentException($"an invalid texture: {outTex.width}/{outTex.height} | Expected size: 128/224 >> Texture Name: {data.Value.outOfStockFileName}");
-							}
-						}
-						catch (ArgumentException e)
-						{
-							Debug.LogWarning($"BBCustomVendingMachines: Failed to load vending machine ({data.Value.itemName}) due to {e.Message}");
-							continue;
-						}
-						catch
-						{
-							Debug.LogWarning($"BBCustomVendingMachines: Failed to load vending machine due to an invalid or inexistent Items enum: {data.Value.itemName}"); 
-							continue;
-						}
-
-						var sodaMachine = ObjectCreationExtensions.CreateSodaMachineInstance(normaltex
-							,outTex);
-						// Include soda machine as a prefab of course, so it appears
-						sodaMachine.name = $"{data.Value.itemName}SodaMachine";
-						sodaMachine.gameObject.SetActive(false);
-						data.Value.machine = sodaMachine;
-						/*
-						and you want to know the solution i came up with?
-						setting the positon to 0,float.max,0
-						- MissingTextureMan101
-						 */
-
-						var vendingMachineBuilder = new GameObject($"{data.Value.itemName}SodaMachineBuilder_{data.Value.normalTextureFileName}").AddComponent<GenericHallBuilder>();
-						DontDestroyOnLoad(vendingMachineBuilder.gameObject);
-						vendingMachineBuilder.gameObject.SetActive(false);
-
-						ObjectBuilderMetaStorage.Instance.Add(new(Info, vendingMachineBuilder));
-
-						vendingMachineBuilder.SetObjectPlacer(
-							ObjectCreationExtensions.SetANewObjectPlacer(
-								sodaMachine.gameObject,
-								CellCoverage.North | CellCoverage.Down, TileShape.Closed, TileShape.Single, TileShape.Straight, TileShape.Corner, TileShape.End)
-								.SetMinAndMaxObjects(data.Value.minAmount, data.Value.maxAmount)
-								.SetTilePreferences(true, false, true)
-							);
-
-						sodaMachines.Add(new(new() { selection = vendingMachineBuilder, weight = data.Value.sodaMachineWeight }, data.Value));
-						prefabs.Add(sodaMachine.gameObject);
-						prefabs.Add(vendingMachineBuilder.gameObject);
-					}
-				}
-				catch (Exception e)
-				{
-					Debug.LogException(e);
-					MTM101BaldiDevAPI.CauseCrash(Info, e);
-				}
-			}, false);
+			LoadingEvents.RegisterOnAssetsLoaded(Info, LoadVendingMachines(), false);
 
 
 			GeneratorManagement.Register(this, GenerationModType.Addend, (name, num, ld) =>
@@ -165,6 +84,85 @@ namespace CustomVendingMachines
 				}
 			});
 
+		}
+
+		IEnumerator LoadVendingMachines()
+		{
+			yield return datas.Count;
+			foreach (var data in datas)
+			{
+				yield return "Loading vending machine for item: " + data.Value.itemName + " ...";
+				Texture2D normaltex;
+				Texture2D outTex = null;
+				try
+				{
+					EnumExtensions.GetFromExtendedName<Items>(data.Value.itemName);
+
+					if (data.Value.usesLeft == 0) // Lotta of checks lol
+						throw new ArgumentException("the usesLeft being set to 0");
+					if (data.Value.minAmount < 0)
+						throw new ArgumentException("the minAmount being below 0");
+					if (data.Value.minAmount > data.Value.maxAmount)
+						throw new ArgumentException("the minAmount being higher than maxAmount");
+					if (data.Value.sodaMachineWeight < 0)
+						throw new ArgumentException("the sodaMachineWeight being below 0");
+
+					if (!File.Exists(Path.Combine(data.Key, data.Value.normalTextureFileName)))
+						throw new ArgumentException("a missing texture. Texture name: " + data.Value.normalTextureFileName);
+
+					normaltex = AssetLoader.TextureFromFile(Path.Combine(data.Key, data.Value.normalTextureFileName));
+					if (normaltex.width != 128 || normaltex.height != 224)
+						throw new ArgumentException($"an invalid texture: {normaltex.width}/{normaltex.height} | Expected size: 128/224 >> Texture Name: {data.Value.normalTextureFileName}");
+
+					if (data.Value.usesLeft > 0) // The out texture will be ignored if the vending machine has infinite uses (uses < 0 are considered infinite)
+					{
+						outTex = AssetLoader.TextureFromFile(Path.Combine(data.Key, data.Value.outOfStockFileName));
+						if (outTex.width != 128 || outTex.height != 224)
+							throw new ArgumentException($"an invalid texture: {outTex.width}/{outTex.height} | Expected size: 128/224 >> Texture Name: {data.Value.outOfStockFileName}");
+					}
+				}
+				catch (ArgumentException e)
+				{
+					Debug.LogWarning($"BBCustomVendingMachines: Failed to load vending machine ({data.Value.itemName}) due to {e.Message}");
+					continue;
+				}
+				catch
+				{
+					Debug.LogWarning($"BBCustomVendingMachines: Failed to load vending machine due to an invalid or inexistent Items enum: {data.Value.itemName}");
+					continue;
+				}
+
+				var sodaMachine = ObjectCreationExtensions.CreateSodaMachineInstance(normaltex
+					, outTex);
+				// Include soda machine as a prefab of course, so it appears
+				sodaMachine.name = $"{data.Value.itemName}SodaMachine";
+				data.Value.machine = sodaMachine;
+				/*
+				and you want to know the solution i came up with?
+				setting the positon to 0,float.max,0
+				- MissingTextureMan101
+				 */
+
+				var vendingMachineBuilder = new GameObject($"{data.Value.itemName}SodaMachineBuilder_{data.Value.normalTextureFileName}").AddComponent<GenericHallBuilder>();
+
+				ObjectBuilderMetaStorage.Instance.Add(new(Info, vendingMachineBuilder));
+
+				vendingMachineBuilder.SetObjectPlacer(
+					ObjectCreationExtensions.SetANewObjectPlacer(
+						sodaMachine.gameObject,
+						CellCoverage.North | CellCoverage.Down, TileShape.Closed, TileShape.Single, TileShape.Straight, TileShape.Corner, TileShape.End)
+						.SetMinAndMaxObjects(data.Value.minAmount, data.Value.maxAmount)
+						.SetTilePreferences(true, false, true)
+					);
+
+				sodaMachines.Add(new(new() { selection = vendingMachineBuilder, weight = data.Value.sodaMachineWeight }, data.Value));
+				prefabs.Add(sodaMachine.gameObject);
+				prefabs.Add(vendingMachineBuilder.gameObject);
+
+				vendingMachineBuilder.gameObject.ConvertToPrefab(true);
+			}
+
+			yield break;
 		}
 
 		internal static int lastlevelnum = 1;
