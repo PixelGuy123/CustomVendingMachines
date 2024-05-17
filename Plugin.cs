@@ -3,19 +3,21 @@ using HarmonyLib;
 using MTM101BaldAPI;
 using MTM101BaldAPI.AssetTools;
 using MTM101BaldAPI.Registers;
+using PixelInternalAPI;
 using PixelInternalAPI.Extensions;
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using UnityEngine;
 
 namespace CustomVendingMachines
 {
 	[BepInDependency("mtm101.rulerp.bbplus.baldidevapi", BepInDependency.DependencyFlags.HardDependency)]
 	[BepInDependency("pixelguy.pixelmodding.baldiplus.pixelinternalapi", BepInDependency.DependencyFlags.HardDependency)]
-	[BepInPlugin("pixelguy.pixelmodding.baldiplus.customvendingmachines", PluginInfo.PLUGIN_NAME, "1.0.1")]
+	[BepInPlugin("pixelguy.pixelmodding.baldiplus.customvendingmachines", PluginInfo.PLUGIN_NAME, "1.0.2")]
 	public class CustomVendingMachinesPlugin : BaseUnityPlugin
 	{
 		// *** Use this method for your mod to add custom vending machines ***
@@ -37,14 +39,14 @@ namespace CustomVendingMachines
 				}
 				catch (Exception e)
 				{
-					Debug.LogException(e);
 					Debug.LogWarning("BBCustomVendingMachines: Failed to load json!: " + Path.GetFileName(file));
+					Debug.LogException(e);
+					errors.Add("Failed to load json!: " + Path.GetFileName(file));
 				}
 			}
 		}
 		private void Awake()
 		{
-
 			Harmony h = new("pixelguy.pixelmodding.baldiplus.customvendingmachines");
 			h.PatchAll();
 
@@ -88,6 +90,7 @@ namespace CustomVendingMachines
 
 		IEnumerator LoadVendingMachines()
 		{
+
 			yield return datas.Count;
 			foreach (var data in datas)
 			{
@@ -96,7 +99,10 @@ namespace CustomVendingMachines
 				Texture2D outTex = null;
 				try
 				{
-					EnumExtensions.GetFromExtendedName<Items>(data.Value.itemName);
+					var en = EnumExtensions.GetFromExtendedName<Items>(data.Value.itemName);
+
+					if (!ItemMetaStorage.Instance.All().Any(x => x.id == en))
+						throw new InvalidItemsEnumException(data.Value.itemName);
 
 					if (data.Value.usesLeft == 0) // Lotta of checks lol
 						throw new ArgumentException("the usesLeft being set to 0");
@@ -108,7 +114,7 @@ namespace CustomVendingMachines
 						throw new ArgumentException("the sodaMachineWeight being below 0");
 
 					if (!File.Exists(Path.Combine(data.Key, data.Value.normalTextureFileName)))
-						throw new ArgumentException("a missing texture. Texture name: " + data.Value.normalTextureFileName);
+						throw new ArgumentException("a missing normal texture. Texture name: " + data.Value.normalTextureFileName);
 
 					normaltex = AssetLoader.TextureFromFile(Path.Combine(data.Key, data.Value.normalTextureFileName));
 					if (normaltex.width != 128 || normaltex.height != 224)
@@ -116,19 +122,31 @@ namespace CustomVendingMachines
 
 					if (data.Value.usesLeft > 0) // The out texture will be ignored if the vending machine has infinite uses (uses < 0 are considered infinite)
 					{
+						if (!File.Exists(Path.Combine(data.Key, data.Value.outOfStockFileName)))
+							throw new ArgumentException("a missing outOfStock texture. Texture name: " + data.Value.outOfStockFileName);
+
 						outTex = AssetLoader.TextureFromFile(Path.Combine(data.Key, data.Value.outOfStockFileName));
 						if (outTex.width != 128 || outTex.height != 224)
 							throw new ArgumentException($"an invalid texture: {outTex.width}/{outTex.height} | Expected size: 128/224 >> Texture Name: {data.Value.outOfStockFileName}");
 					}
 				}
-				catch (ArgumentException e)
+				catch(ArgumentException e)
 				{
+					errors.Add($"Failed to load vending machine (\"{data.Value.itemName}\") due to {e.Message}");
 					Debug.LogWarning($"BBCustomVendingMachines: Failed to load vending machine ({data.Value.itemName}) due to {e.Message}");
 					continue;
 				}
-				catch
+				catch (InvalidItemsEnumException e)
 				{
-					Debug.LogWarning($"BBCustomVendingMachines: Failed to load vending machine due to an invalid or inexistent Items enum: {data.Value.itemName}");
+					errors.Add($"Failed to load vending machine due to {e.Message}");
+					Debug.LogWarning($"BBCustomVendingMachines: Failed to load vending machine due to {e.Message}");
+					continue;
+				}
+				catch(Exception e)
+				{
+					errors.Add($"Failed to load vending machine due to a specific bug or inexistent Items enum: \"{data.Value.itemName}\"");
+					Debug.LogWarning($"BBCustomVendingMachines: Failed to load vending machine due to a specific bug or inexistent Items enum: {data.Value.itemName}");
+					Debug.LogException(e);
 					continue;
 				}
 
@@ -161,9 +179,23 @@ namespace CustomVendingMachines
 
 				vendingMachineBuilder.gameObject.ConvertToPrefab(true);
 			}
+			StringBuilder accerrors = new();
+			for (int i = 0; i < errors.Count;)
+			{
+				accerrors.AppendLine(errors[i]);
+				if (++i % 3 == 0)
+				{
+					ResourceManager.RaisePopup(Info, accerrors.ToString());
+					accerrors.Clear();
+				}
+			}
+			if (accerrors.Length > 0)
+				ResourceManager.RaisePopup(Info, accerrors.ToString());
 
 			yield break;
 		}
+
+		readonly static List<string> errors = [];
 
 		internal static int lastlevelnum = 1;
 
@@ -175,6 +207,8 @@ namespace CustomVendingMachines
 
 		readonly static internal List<GameObject> prefabs = [];
 	}
+
+	class InvalidItemsEnumException(string invalidEnumName) : Exception($"an Item that doesn\'t exist in the meta storage ({invalidEnumName})");
 
 	[Serializable]
 	class VendingMachineData
