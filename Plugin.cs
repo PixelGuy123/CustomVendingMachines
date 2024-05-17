@@ -57,6 +57,9 @@ namespace CustomVendingMachines
 
 			GeneratorManagement.Register(this, GenerationModType.Addend, (name, num, ld) =>
 			{
+				ld.minSpecialBuilders += Mathf.Min(datas.Count, 3);
+				ld.maxSpecialBuilders += Mathf.Min(datas.Count, 3);
+
 				bool endless = name == "INF";
 				for (int i = num; !endless || i >= lastlevelnum; i--)
 				{
@@ -92,6 +95,9 @@ namespace CustomVendingMachines
 		{
 
 			yield return datas.Count;
+
+			int sodaCount = GenericExtensions.FindResourceObjects<SodaMachine>().Length; // amount of soda machine prefabs
+
 			foreach (var data in datas)
 			{
 				yield return "Loading vending machine for item: " + data.Value.itemName + " ...";
@@ -178,6 +184,7 @@ namespace CustomVendingMachines
 				prefabs.Add(vendingMachineBuilder.gameObject);
 
 				vendingMachineBuilder.gameObject.ConvertToPrefab(true);
+				sodaCount++;
 			}
 			StringBuilder accerrors = new();
 			for (int i = 0; i < errors.Count;)
@@ -191,6 +198,9 @@ namespace CustomVendingMachines
 			}
 			if (accerrors.Length > 0)
 				ResourceManager.RaisePopup(Info, accerrors.ToString());
+
+			foreach (var mac in sodaMachines)
+				mac.Key.weight /= sodaCount;
 
 			yield break;
 		}
