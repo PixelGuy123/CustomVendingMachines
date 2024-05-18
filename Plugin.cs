@@ -52,7 +52,7 @@ namespace CustomVendingMachines
 
 			AddDataFromDirectory(AssetLoader.GetModPath(this)); // Read from the directory already
 
-			LoadingEvents.RegisterOnAssetsLoaded(Info, LoadVendingMachines(), false);
+			LoadingEvents.RegisterOnAssetsLoaded(Info, LoadVendingMachines(), true);
 
 
 			GeneratorManagement.Register(this, GenerationModType.Addend, (name, num, ld) =>
