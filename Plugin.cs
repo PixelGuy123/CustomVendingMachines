@@ -1,4 +1,5 @@
 ﻿using BepInEx;
+using BepInEx.Bootstrap;
 using HarmonyLib;
 using MTM101BaldAPI;
 using MTM101BaldAPI.AssetTools;
@@ -52,7 +53,7 @@ namespace CustomVendingMachines
 
 			AddDataFromDirectory(AssetLoader.GetModPath(this)); // Read from the directory already
 
-			LoadingEvents.RegisterOnAssetsLoaded(Info, LoadVendingMachines(), true);
+			LoadingEvents.RegisterOnAssetsLoaded(Info, LoadVendingMachines(), false);
 
 
 			GeneratorManagement.Register(this, GenerationModType.Addend, (name, num, ld) =>
@@ -65,9 +66,11 @@ namespace CustomVendingMachines
 				{
 					foreach (var machine in sodaMachines)
 					{
-
 						if (!machine.Value.IncludeInLevel(endless ? name + i.ToString() : name) || ld.specialHallBuilders.Contains(machine.Key)) continue;
-						machine.Value.machine.SetPotentialItems(new WeightedItemObject() { selection = ItemMetaStorage.Instance.FindByEnum(EnumExtensions.GetFromExtendedName<Items>(machine.Value.itemName)).value, weight = 1 })
+
+						machine.Value.machine.SetPotentialItems(new WeightedItemObject() { selection = 
+							string.IsNullOrEmpty(machine.Value.modId) ? ItemMetaStorage.Instance.FindByEnum(machine.Value.en).value :
+							ItemMetaStorage.Instance.FindByEnumFromMod(machine.Value.en, Chainloader.PluginInfos[machine.Value.modId]).value, weight = 1 })
 						.SetUses(machine.Value.usesLeft);
 
 						ld.specialHallBuilders = ld.specialHallBuilders.AddToArray(machine.Key);
@@ -105,9 +108,10 @@ namespace CustomVendingMachines
 				Texture2D outTex = null;
 				try
 				{
-					var en = EnumExtensions.GetFromExtendedName<Items>(data.Value.itemName);
+					Items en = EnumExtensions.GetFromExtendedName<Items>(data.Value.itemName);
+					BepInEx.PluginInfo inf = string.IsNullOrEmpty(data.Value.modId) || !Chainloader.PluginInfos.ContainsKey(data.Value.modId) ? null : Chainloader.PluginInfos[data.Value.modId];
 
-					if (!ItemMetaStorage.Instance.All().Any(x => x.id == en))
+					if (!ItemMetaStorage.Instance.All().Any(x => x.id == en && (inf == null || x.info == inf)))
 						throw new InvalidItemsEnumException(data.Value.itemName);
 
 					if (data.Value.usesLeft == 0) // Lotta of checks lol
@@ -135,6 +139,8 @@ namespace CustomVendingMachines
 						if (outTex.width != 128 || outTex.height != 224)
 							throw new ArgumentException($"an invalid texture: {outTex.width}/{outTex.height} | Expected size: 128/224 >> Texture Name: {data.Value.outOfStockFileName}");
 					}
+
+					data.Value.en = en;
 				}
 				catch(ArgumentException e)
 				{
@@ -161,11 +167,6 @@ namespace CustomVendingMachines
 				// Include soda machine as a prefab of course, so it appears
 				sodaMachine.name = $"{data.Value.itemName}SodaMachine";
 				data.Value.machine = sodaMachine;
-				/*
-				and you want to know the solution i came up with?
-				setting the positon to 0,float.max,0
-				- MissingTextureMan101
-				 */
 
 				var vendingMachineBuilder = new GameObject($"{data.Value.itemName}SodaMachineBuilder_{data.Value.normalTextureFileName}").AddComponent<GenericHallBuilder>();
 
@@ -223,6 +224,7 @@ namespace CustomVendingMachines
 	[Serializable]
 	class VendingMachineData
 	{
+		public string modId = string.Empty;
 		public int minAmount = 1;
 		public int maxAmount = 3;
 		public int sodaMachineWeight = 100;
@@ -236,6 +238,9 @@ namespace CustomVendingMachines
 
 		[NonSerialized]
 		public SodaMachine machine;
+
+		[NonSerialized]
+		public Items en;
 	}
 
 	/*
@@ -269,21 +274,5 @@ namespace CustomVendingMachines
 			CustomVendingMachinesPlugin.lastlevelnum = 1;
 			CustomVendingMachinesPlugin.builders.Clear();
 		}
-	}
-
-	[HarmonyPatch]
-	class PrefabActivation
-	{
-		[HarmonyPatch(typeof(GameInitializer), "Initialize")]
-		[HarmonyPostfix]
-		static void ActivateThem(SceneObject ___sceneObject)
-		{ 
-			if (___sceneObject != null && ___sceneObject)
-				CustomVendingMachinesPlugin.prefabs.ForEach(x => x.SetActive(true)); 
-		}
-
-		[HarmonyPatch(typeof(BaseGameManager), "Initialize")]
-		[HarmonyPrefix]
-		static void DisableThem() => CustomVendingMachinesPlugin.prefabs.ForEach(x => x.SetActive(false));
 	}
 }
