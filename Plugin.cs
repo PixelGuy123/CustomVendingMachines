@@ -7,7 +7,6 @@ using MTM101BaldAPI.Registers;
 using PixelInternalAPI;
 using PixelInternalAPI.Extensions;
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -18,7 +17,7 @@ namespace CustomVendingMachines
 {
 	[BepInDependency("mtm101.rulerp.bbplus.baldidevapi", BepInDependency.DependencyFlags.HardDependency)]
 	[BepInDependency("pixelguy.pixelmodding.baldiplus.pixelinternalapi", BepInDependency.DependencyFlags.HardDependency)]
-	[BepInPlugin("pixelguy.pixelmodding.baldiplus.customvendingmachines", PluginInfo.PLUGIN_NAME, "1.0.3")]
+	[BepInPlugin("pixelguy.pixelmodding.baldiplus.customvendingmachines", PluginInfo.PLUGIN_NAME, "1.0.4")]
 	public class CustomVendingMachinesPlugin : BaseUnityPlugin
 	{
 		// *** Use this method for your mod to add custom vending machines ***
@@ -53,11 +52,10 @@ namespace CustomVendingMachines
 
 			AddDataFromDirectory(AssetLoader.GetModPath(this)); // Read from the directory already
 
-			LoadingEvents.RegisterOnAssetsLoaded(Info, LoadVendingMachines(), false);
-
-
 			GeneratorManagement.Register(this, GenerationModType.Addend, (name, num, ld) =>
 			{
+				LoadVendingMachines();
+
 				ld.minSpecialBuilders += Mathf.Min(datas.Count, 3);
 				ld.maxSpecialBuilders += Mathf.Min(datas.Count, 3);
 
@@ -94,16 +92,15 @@ namespace CustomVendingMachines
 
 		}
 
-		IEnumerator LoadVendingMachines()
+		void LoadVendingMachines()
 		{
-
-			yield return datas.Count;
+			if (initializedMachines) return;
+			initializedMachines = true;
 
 			int sodaCount = GenericExtensions.FindResourceObjects<SodaMachine>().Length; // amount of soda machine prefabs
 
 			foreach (var data in datas)
 			{
-				yield return "Loading vending machine for item: " + data.Value.itemName + " ...";
 				Texture2D normaltex;
 				Texture2D outTex = null;
 				try
@@ -202,9 +199,9 @@ namespace CustomVendingMachines
 
 			foreach (var mac in sodaMachines)
 				mac.Key.weight /= sodaCount;
-
-			yield break;
 		}
+
+		static bool initializedMachines = false;
 
 		readonly static List<string> errors = [];
 
