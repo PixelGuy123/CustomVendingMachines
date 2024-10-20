@@ -17,7 +17,7 @@ namespace CustomVendingMachines
 {
 	[BepInDependency("mtm101.rulerp.bbplus.baldidevapi", BepInDependency.DependencyFlags.HardDependency)]
 	[BepInDependency("pixelguy.pixelmodding.baldiplus.pixelinternalapi", BepInDependency.DependencyFlags.HardDependency)]
-	[BepInPlugin("pixelguy.pixelmodding.baldiplus.customvendingmachines", PluginInfo.PLUGIN_NAME, "1.0.4")]
+	[BepInPlugin("pixelguy.pixelmodding.baldiplus.customvendingmachines", PluginInfo.PLUGIN_NAME, "1.0.4.1")]
 	public class CustomVendingMachinesPlugin : BaseUnityPlugin
 	{
 		// *** Use this method for your mod to add custom vending machines ***
@@ -65,10 +65,11 @@ namespace CustomVendingMachines
 					foreach (var machine in sodaMachines)
 					{
 						if (!machine.Value.IncludeInLevel(endless ? name + i.ToString() : name) || ld.specialHallBuilders.Contains(machine.Key)) continue;
+						ItemObject item = !Chainloader.PluginInfos.TryGetValue(machine.Value.modId, out var inf) ? // If no Info found, findByNormalEnum
+							ItemMetaStorage.Instance.FindByEnum(machine.Value.en).value :
+							ItemMetaStorage.Instance.FindByEnumFromMod(machine.Value.en, inf).value;
 
-						machine.Value.machine.SetPotentialItems(new WeightedItemObject() { selection = 
-							string.IsNullOrEmpty(machine.Value.modId) ? ItemMetaStorage.Instance.FindByEnum(machine.Value.en).value :
-							ItemMetaStorage.Instance.FindByEnumFromMod(machine.Value.en, Chainloader.PluginInfos[machine.Value.modId]).value, weight = 1 })
+						machine.Value.machine.SetPotentialItems(new WeightedItemObject() { selection = item, weight = 1 })
 						.SetUses(machine.Value.usesLeft);
 
 						ld.specialHallBuilders = ld.specialHallBuilders.AddToArray(machine.Key);
@@ -106,7 +107,7 @@ namespace CustomVendingMachines
 				try
 				{
 					Items en = EnumExtensions.GetFromExtendedName<Items>(data.Value.itemName);
-					BepInEx.PluginInfo inf = string.IsNullOrEmpty(data.Value.modId) || !Chainloader.PluginInfos.ContainsKey(data.Value.modId) ? null : Chainloader.PluginInfos[data.Value.modId];
+					Chainloader.PluginInfos.TryGetValue(data.Value.modId, out BepInEx.PluginInfo inf);
 
 					if (!ItemMetaStorage.Instance.All().Any(x => x.id == en && (inf == null || x.info == inf)))
 						throw new InvalidItemsEnumException(data.Value.itemName);
@@ -184,6 +185,7 @@ namespace CustomVendingMachines
 				vendingMachineBuilder.gameObject.ConvertToPrefab(true);
 				sodaCount++;
 			}
+
 			StringBuilder accerrors = new();
 			for (int i = 0; i < errors.Count;)
 			{
