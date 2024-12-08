@@ -17,7 +17,7 @@ namespace CustomVendingMachines
 {
 	[BepInDependency("mtm101.rulerp.bbplus.baldidevapi", BepInDependency.DependencyFlags.HardDependency)]
 	[BepInDependency("pixelguy.pixelmodding.baldiplus.pixelinternalapi", BepInDependency.DependencyFlags.HardDependency)]
-	[BepInPlugin("pixelguy.pixelmodding.baldiplus.customvendingmachines", PluginInfo.PLUGIN_NAME, "1.0.4.1")]
+	[BepInPlugin("pixelguy.pixelmodding.baldiplus.customvendingmachines", PluginInfo.PLUGIN_NAME, "1.0.4.2")]
 	public class CustomVendingMachinesPlugin : BaseUnityPlugin
 	{
 		// *** Use this method for your mod to add custom vending machines ***
@@ -52,8 +52,12 @@ namespace CustomVendingMachines
 
 			AddDataFromDirectory(AssetLoader.GetModPath(this)); // Read from the directory already
 
-			GeneratorManagement.Register(this, GenerationModType.Addend, (name, num, ld) =>
+			GeneratorManagement.Register(this, GenerationModType.Addend, (name, num, sco) =>
 			{
+				var ld = sco.levelObject;
+				if (ld == null)
+					return;
+
 				LoadVendingMachines();
 
 				ld.minSpecialBuilders += Mathf.Min(datas.Count, 3);
