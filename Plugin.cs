@@ -60,39 +60,38 @@ namespace CustomVendingMachines
 
 				LoadVendingMachines();
 
-				ld.minSpecialBuilders += Mathf.Min(datas.Count, 3);
-				ld.maxSpecialBuilders += Mathf.Min(datas.Count, 3);
-
 				bool endless = name == "INF";
 				for (int i = num; !endless || i >= lastlevelnum; i--)
 				{
 					foreach (var machine in sodaMachines)
 					{
-						if (!machine.Value.IncludeInLevel(endless ? name + i.ToString() : name) || ld.specialHallBuilders.Contains(machine.Key)) continue;
-						ItemObject item = !Chainloader.PluginInfos.TryGetValue(machine.Value.modId, out var inf) ? // If no Info found, findByNormalEnum
-							ItemMetaStorage.Instance.FindByEnum(machine.Value.en).value :
-							ItemMetaStorage.Instance.FindByEnumFromMod(machine.Value.en, inf).value;
+						if (!machine.IncludeInLevel(endless ? name + i.ToString() : name)) continue;
+						ItemObject item = !Chainloader.PluginInfos.TryGetValue(machine.modId, out var inf) ? // If no Info found, findByNormalEnum
+							ItemMetaStorage.Instance.FindByEnum(machine.en).value :
+							ItemMetaStorage.Instance.FindByEnumFromMod(machine.en, inf).value;
 
-						machine.Value.machine.SetPotentialItems(new WeightedItemObject() { selection = item, weight = 1 })
-						.SetUses(machine.Value.usesLeft);
+						machine.machine.SetPotentialItems(new WeightedItemObject() { selection = item, weight = 1 })
+						.SetUses(machine.usesLeft);
 
-						ld.specialHallBuilders = ld.specialHallBuilders.AddToArray(machine.Key);
-						builders.Add(machine.Key);
+
+						StructureWithParameters param = ld.forcedStructures.FirstOrDefault(s => s.prefab is Structure_EnvironmentObjectPlacer);
+						if (param == null)
+							ld.potentialStructures.FirstOrDefault(s => s.selection.prefab is Structure_EnvironmentObjectPlacer);
+
+						if (param == null) // If it's still null... then skip
+							continue;
+
+
+						param.parameters.prefab = param.parameters.prefab.AddToArray(new() { selection = machine.machine.gameObject, weight = machine.sodaMachineWeight });
+						param.parameters.minMax[0].x += machine.minAmount;
+						param.parameters.minMax[0].z += machine.maxAmount;
 					}
 					if (!endless)
 						break;
 				}
 				
 				ld.MarkAsNeverUnload();
-				if (endless)
-				{ 
-					lastlevelnum = num;
-					foreach (var b in builders) // Fail safe afterwards
-					{
-						if (ld.specialHallBuilders.Contains(b)) continue;
-						ld.specialHallBuilders = ld.specialHallBuilders.AddToArray(b);
-					}
-				}
+				lastlevelnum = num;
 			});
 
 		}
@@ -170,23 +169,10 @@ namespace CustomVendingMachines
 				sodaMachine.name = $"{data.Value.itemName}SodaMachine";
 				data.Value.machine = sodaMachine;
 
-				var vendingMachineBuilder = new GameObject($"{data.Value.itemName}SodaMachineBuilder_{data.Value.normalTextureFileName}").AddComponent<GenericHallBuilder>();
+				//.Instance.Add(new(Info, vendingMachineBuilder)); Meta data for structure builders... if there was one lol
 
-				ObjectBuilderMetaStorage.Instance.Add(new(Info, vendingMachineBuilder));
-
-				vendingMachineBuilder.SetObjectPlacer(
-					ObjectCreationExtensions.SetANewObjectPlacer(
-						sodaMachine.gameObject,
-						CellCoverage.North | CellCoverage.Down, TileShape.Closed, TileShape.Single, TileShape.Straight, TileShape.Corner, TileShape.End)
-						.SetMinAndMaxObjects(data.Value.minAmount, data.Value.maxAmount)
-						.SetTilePreferences(true, false, true)
-					);
-
-				sodaMachines.Add(new(new() { selection = vendingMachineBuilder, weight = data.Value.sodaMachineWeight }, data.Value));
+				sodaMachines.Add(data.Value);
 				prefabs.Add(sodaMachine.gameObject);
-				prefabs.Add(vendingMachineBuilder.gameObject);
-
-				vendingMachineBuilder.gameObject.ConvertToPrefab(true);
 				sodaCount++;
 			}
 
@@ -203,8 +189,9 @@ namespace CustomVendingMachines
 			if (accerrors.Length > 0)
 				ResourceManager.RaisePopup(Info, accerrors.ToString());
 
-			foreach (var mac in sodaMachines)
-				mac.Key.weight /= sodaCount;
+			// Balance out weights
+			if (sodaCount != 0)
+				sodaMachines.ForEach(mac => mac.sodaMachineWeight /= sodaCount);
 		}
 
 		static bool initializedMachines = false;
@@ -213,9 +200,7 @@ namespace CustomVendingMachines
 
 		internal static int lastlevelnum = 1;
 
-		internal static List<WeightedObjectBuilder> builders = [];
-
-		readonly internal List<KeyValuePair<WeightedObjectBuilder, VendingMachineData>> sodaMachines = [];
+		readonly internal List<VendingMachineData> sodaMachines = [];
 
 		readonly static List<KeyValuePair<string, VendingMachineData>> datas = [];
 
@@ -272,10 +257,7 @@ namespace CustomVendingMachines
 	[HarmonyPatch(typeof(MainMenu), "Start")]
 	class ResetIncludedBuildersPatch
 	{
-		private static void Prefix()
-		{
+		private static void Prefix() =>
 			CustomVendingMachinesPlugin.lastlevelnum = 1;
-			CustomVendingMachinesPlugin.builders.Clear();
-		}
 	}
 }
