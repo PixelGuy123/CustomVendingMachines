@@ -242,12 +242,14 @@ namespace CustomVendingMachines
 					}
 
 					data.machine = ObjectCreationExtensions.CreateSodaMachineInstance(normalTexture, outOfStockTex ?? normalTexture);
-					data.machine.AddNewPotentialItems(weightedItems);
+					data.machine.name = "CustomVendingMachine_" + (data.items.Length == 1 ? data.items[0].item : "MultipleItems");
+					data.machine.SetUses(data.usesLeft);
+					data.machine.SetPotentialItems(weightedItems);
 
 					// Acceptable items search
 					if (data.acceptableItems.Length != 0)
 					{
-						List<Items> acceptableItms = [];
+						HashSet<Items> acceptableItms = [];
 						for (int i = 0; i < data.acceptableItems.Length; i++)
 						{
 							if (string.IsNullOrEmpty(data.acceptableItems[i]))
@@ -263,7 +265,7 @@ namespace CustomVendingMachines
 							}
 						}
 						if (acceptableItms.Count != 0)
-							data.machine.AddNewRequiredItems([.. acceptableItms]);
+							data.machine.SetRequiredItems([.. acceptableItms]);
 					}
 
 					sodaMachines.Add(data);
