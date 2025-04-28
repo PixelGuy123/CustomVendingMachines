@@ -1,25 +1,24 @@
-﻿using BepInEx;
-using HarmonyLib;
-using MTM101BaldAPI.AssetTools;
-using MTM101BaldAPI.Registers;
-using PixelInternalAPI;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using UnityEngine;
-using Newtonsoft.Json;
+using BepInEx;
 using BepInEx.Bootstrap;
+using HarmonyLib;
 using MTM101BaldAPI;
+using MTM101BaldAPI.AssetTools;
+using MTM101BaldAPI.Registers;
+using Newtonsoft.Json;
+using PixelInternalAPI;
 using PixelInternalAPI.Extensions;
-using System.Threading;
+using UnityEngine;
 
 namespace CustomVendingMachines
 {
 	[BepInDependency("mtm101.rulerp.bbplus.baldidevapi", BepInDependency.DependencyFlags.HardDependency)]
 	[BepInDependency("pixelguy.pixelmodding.baldiplus.pixelinternalapi", BepInDependency.DependencyFlags.HardDependency)]
-	[BepInPlugin("pixelguy.pixelmodding.baldiplus.customvendingmachines", PluginInfo.PLUGIN_NAME, "1.0.5")]
+	[BepInPlugin("pixelguy.pixelmodding.baldiplus.customvendingmachines", PluginInfo.PLUGIN_NAME, "1.0.6")]
 	public class CustomVendingMachinesPlugin : BaseUnityPlugin
 	{
 		// *** Use this method for your mod to add custom vending machines ***
@@ -70,13 +69,12 @@ namespace CustomVendingMachines
 			{
 				LoadVendingMachines();
 
+				Dictionary<VendingMachineData, WeightedGameObject> dataWeightPair = []; // To save memory
+
 				if (!placer)
-					 placer = GenericExtensions.FindResourceObjectByName<Structure_EnvironmentObjectPlacer>("Structure_EnvironmentObjectBuilder_Weighted");
+					placer = GenericExtensions.FindResourceObjectByName<Structure_EnvironmentObjectPlacer>("Structure_EnvironmentObjectBuilder_Weighted");
 
-				if (!sco.levelObject)
-					return;
-
-				List<WeightedGameObject> machines = [];
+				List<VendingMachineData> machines = [];
 				bool infiniteFloors = name.StartsWith("INF");
 
 				foreach (var machine in sodaMachines)
@@ -87,7 +85,7 @@ namespace CustomVendingMachines
 						for (int i = 0; i < machine.allowedLevels.Length; i++)
 						{
 							int res = -1;
-							if (machine.allowedLevels[i].StartsWith("INF") && 
+							if (machine.allowedLevels[i].StartsWith("INF") &&
 							int.TryParse(machine.allowedLevels[i].Substring(3, machine.allowedLevels[i].Length - 3), out res) && // Gets the raw number after the "INF" prefix
 							num >= res // Inf floor support
 							)
@@ -99,87 +97,134 @@ namespace CustomVendingMachines
 					}
 					else if (machine.allowedLevels.Contains(name))
 						flag = true;
-					
+
 					if (flag)
-						machines.Add(new() { selection = machine.machine.gameObject, weight = machine.sodaMachineWeight });
-					
+						machines.Add(machine);
+
 
 				}
 
-				if (machines.Count == 0) 
+				if (machines.Count == 0)
 					return;
 
-				WeightedGameObject[] machinesArray = [.. machines];
-
-				if (infiniteFloors) 
+				WeightedGameObject[] GetProperArray(LevelObject levelObj)
 				{
-					sco.levelObject.forcedStructures = sco.levelObject.forcedStructures.AddToArray(new() 
-					{ prefab = placer, 
-					parameters = new() 
-						{ 
-							minMax = [new(Mathf.FloorToInt(2 * num * 0.35f), Mathf.FloorToInt(3.5f * num * 0.45f))],
-							chance = [0.25f * num * 0.35f % 1f],
-							prefab = machinesArray
-					} 
-					});
-					return;
+					var filteredMachines = machines.Where(x => x.convertedLevelTypes.Contains(levelObj.type));
+					WeightedGameObject[] objArray = new WeightedGameObject[filteredMachines.Count()];
+					int idx = 0;
+					foreach (var machine in filteredMachines)
+					{
+						if (!dataWeightPair.TryGetValue(machine, out var weight))
+						{
+							weight = new() { selection = machine.machine.gameObject, weight = machine.sodaMachineWeight };
+							dataWeightPair.Add(machine, weight);
+						}
+						objArray[idx++] = weight;
+					}
+					return objArray;
 				}
 
-				switch (name)
+				if (infiniteFloors)
 				{
-					default: break;
-
-					case "F1":
-						sco.levelObject.forcedStructures = sco.levelObject.forcedStructures = sco.levelObject.forcedStructures.AddToArray(new()
+					foreach (var levelObject in sco.GetCustomLevelObjects())
+					{
+						levelObject.forcedStructures = levelObject.forcedStructures.AddToArray(new()  // Presumably, any infinite floors port would be using the levelObject, not a randomized array
 						{
 							prefab = placer,
 							parameters = new()
 							{
-								minMax = [new(2, 5)],
-								chance = [0.5f],
-								prefab = machinesArray
+								minMax = [new(Mathf.FloorToInt(2 * num * 0.35f), Mathf.FloorToInt(3.5f * num * 0.45f))],
+								chance = [0.25f * num * 0.35f % 1f],
+								prefab = GetProperArray(levelObject)
 							}
 						});
-						break;
+					}
+					return;
+				}
+				foreach (var levelObject in sco.GetCustomLevelObjects())
+				{
+					switch (name)
+					{
+						default: break;
 
-					case "F2":
-						sco.levelObject.forcedStructures = sco.levelObject.forcedStructures = sco.levelObject.forcedStructures.AddToArray(new()
-						{
-							prefab = placer,
-							parameters = new()
+						case "F1":
+							levelObject.forcedStructures = levelObject.forcedStructures.AddToArray(new()
 							{
-								minMax = [new(4, 6)],
-								chance = [0.35f],
-								prefab = machinesArray
-							}
-						});
-						break;
+								prefab = placer,
+								parameters = new()
+								{
+									minMax = [new(2, 5)],
+									chance = [0.5f],
+									prefab = GetProperArray(levelObject)
+								}
+							});
+							break;
 
-					case "F3":
-						sco.levelObject.forcedStructures = sco.levelObject.forcedStructures = sco.levelObject.forcedStructures.AddToArray(new()
-						{
-							prefab = placer,
-							parameters = new()
+						case "F2":
+							levelObject.forcedStructures = levelObject.forcedStructures.AddToArray(new()
 							{
-								minMax = [new(6, 9)],
-								chance = [0.65f],
-								prefab = machinesArray
-							}
-						});
-						break;
+								prefab = placer,
+								parameters = new()
+								{
+									minMax = [new(4, 6)],
+									chance = [0.35f],
+									prefab = GetProperArray(levelObject)
+								}
+							});
+							break;
 
-					case "END":
-						sco.levelObject.forcedStructures = sco.levelObject.forcedStructures = sco.levelObject.forcedStructures.AddToArray(new()
-						{
-							prefab = placer,
-							parameters = new()
+						case "F3":
+							levelObject.forcedStructures = levelObject.forcedStructures.AddToArray(new()
 							{
-								minMax = [new(4, 7)],
-								chance = [0.5f],
-								prefab = machinesArray
-							}
-						});
-						break;
+								prefab = placer,
+								parameters = new()
+								{
+									minMax = [new(6, 9)],
+									chance = [0.65f],
+									prefab = GetProperArray(levelObject)
+								}
+							});
+							break;
+
+						case "F4":
+							levelObject.forcedStructures = levelObject.forcedStructures.AddToArray(new()
+							{
+								prefab = placer,
+								parameters = new()
+								{
+									minMax = [new(7, 10)],
+									chance = [0.68f],
+									prefab = GetProperArray(levelObject)
+								}
+							});
+							break;
+
+						case "F5":
+							levelObject.forcedStructures = levelObject.forcedStructures.AddToArray(new()
+							{
+								prefab = placer,
+								parameters = new()
+								{
+									minMax = [new(8, 9)],
+									chance = [0.72f],
+									prefab = GetProperArray(levelObject)
+								}
+							});
+							break;
+
+						case "END":
+							levelObject.forcedStructures = levelObject.forcedStructures.AddToArray(new()
+							{
+								prefab = placer,
+								parameters = new()
+								{
+									minMax = [new(4, 7)],
+									chance = [0.5f],
+									prefab = GetProperArray(levelObject)
+								}
+							});
+							break;
+					}
 				}
 			});
 		}
@@ -189,6 +234,20 @@ namespace CustomVendingMachines
 			if (initializedMachines) return;
 			initializedMachines = true;
 
+			static bool TryGetFromExtendedName<T>(string name, out T en) where T : Enum
+			{
+				try
+				{
+					en = EnumExtensions.GetFromExtendedName<T>(name);
+					return true;
+				}
+				catch
+				{
+					en = default;
+					return false;
+				}
+			}
+
 			static void ThrowIfInvalidTexture(Texture2D tex)
 			{
 				if (tex.width != 128 || tex.height != 224)
@@ -196,9 +255,9 @@ namespace CustomVendingMachines
 			}
 
 			foreach (var dataPair in datas)
-			{				
+			{
 				var data = dataPair.Value;
-				
+
 				try
 				{
 					// Texture Load
@@ -211,7 +270,7 @@ namespace CustomVendingMachines
 
 					Texture2D outOfStockTex = null;
 
-					if (!string.IsNullOrEmpty(data.outOfStockTextureFileName)) 
+					if (!string.IsNullOrEmpty(data.outOfStockTextureFileName))
 					{
 						texPath = Path.Combine(dataPair.Key, data.outOfStockTextureFileName);
 						if (!File.Exists(texPath))
@@ -225,10 +284,9 @@ namespace CustomVendingMachines
 					WeightedItemObject[] weightedItems = new WeightedItemObject[data.items.Length];
 					for (int i = 0; i < data.items.Length; i++)
 					{
-						if (data.items[i].item == "None" || string.IsNullOrEmpty(data.items[i].item))
+						if (data.items[i].item == "None" || !TryGetFromExtendedName<Items>(data.items[i].item, out var itmEnum))
 							throw new InvalidItemsEnumException(data.items[i].item);
 
-						var itmEnum = EnumExtensions.GetFromExtendedName<Items>(data.items[i].item);
 						var itemMeta = (string.IsNullOrEmpty(data.items[i].mod_guid) ?
 								ItemMetaStorage.Instance.FindByEnum(itmEnum) : ItemMetaStorage.Instance.FindByEnumFromMod(itmEnum, Chainloader.PluginInfos[data.items[i].mod_guid]))
 
@@ -261,23 +319,46 @@ namespace CustomVendingMachines
 							}
 							catch
 							{
-								Debug.LogWarning($"Failed to find enum for acceptable item ({data.acceptableItems[i]}).");
+								Debug.LogWarning($"CustomVendingMachines: Failed to find enum for acceptable item ({data.acceptableItems[i]}).");
 							}
 						}
 						if (acceptableItms.Count != 0)
 							data.machine.SetRequiredItems([.. acceptableItms]);
 					}
 
+					if (data.allowedLevelTypes.Length == 0)
+					{
+						var nums = EnumExtensions.GetValues<LevelType>();
+						for (int i = 0; i < nums.Length; i++)
+							data.convertedLevelTypes.Add((LevelType)nums[i]); // Adds all the available LevelType values (even modded ones)
+					}
+					else
+					{
+						for (int i = 0; i < data.allowedLevelTypes.Length; i++)
+						{
+							try // Works this way with strings to support customized LevelTypes
+							{
+								data.convertedLevelTypes.Add(EnumExtensions.GetFromExtendedName<LevelType>(data.allowedLevelTypes[i]));
+							}
+							catch
+							{
+								Debug.LogWarning($"CustomVendingMachines: failed to parse LevelType enum value: \"{data.allowedLevelTypes[i]}\"");
+							}
+						}
+					}
+
 					sodaMachines.Add(data);
 				}
-				catch(Exception e)
+				catch (Exception e)
 				{
+					Debug.LogWarning("CustomVendingMachines: There was an error in the process of making vending machines!");
+					Debug.LogError("Single-line error: " + e.Message);
 					Debug.LogException(e);
 					errors.Add(e.Message);
 				}
 			}
 
-			
+
 
 
 			StringBuilder accerrors = new();
@@ -330,9 +411,12 @@ namespace CustomVendingMachines
 
 		[JsonRequired]
 		public string[] allowedLevels = [];
+		public string[] allowedLevelTypes = [];
 
 		[JsonIgnore]
 		public SodaMachine machine;
+		[JsonIgnore]
+		public HashSet<LevelType> convertedLevelTypes = [];
 	}
 
 	[JsonObject]
