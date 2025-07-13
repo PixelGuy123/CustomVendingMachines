@@ -18,7 +18,7 @@ namespace CustomVendingMachines
 {
 	[BepInDependency("mtm101.rulerp.bbplus.baldidevapi", BepInDependency.DependencyFlags.HardDependency)]
 	[BepInDependency("pixelguy.pixelmodding.baldiplus.pixelinternalapi", BepInDependency.DependencyFlags.HardDependency)]
-	[BepInPlugin("pixelguy.pixelmodding.baldiplus.customvendingmachines", PluginInfo.PLUGIN_NAME, "1.0.6")]
+	[BepInPlugin("pixelguy.pixelmodding.baldiplus.customvendingmachines", PluginInfo.PLUGIN_NAME, "1.0.6.1")]
 	public class CustomVendingMachinesPlugin : BaseUnityPlugin
 	{
 		// *** Use this method for your mod to add custom vending machines ***
@@ -124,25 +124,30 @@ namespace CustomVendingMachines
 					return objArray;
 				}
 
-				if (infiniteFloors)
-				{
-					foreach (var levelObject in sco.GetCustomLevelObjects())
-					{
-						levelObject.forcedStructures = levelObject.forcedStructures.AddToArray(new()  // Presumably, any infinite floors port would be using the levelObject, not a randomized array
-						{
-							prefab = placer,
-							parameters = new()
-							{
-								minMax = [new(Mathf.FloorToInt(2 * num * 0.35f), Mathf.FloorToInt(3.5f * num * 0.45f))],
-								chance = [0.25f * num * 0.35f % 1f],
-								prefab = GetProperArray(levelObject)
-							}
-						});
-					}
-					return;
-				}
+				// if (infiniteFloors)
+				// {
+				// 	foreach (var levelObject in sco.GetCustomLevelObjects())
+				// 	{
+				// 		levelObject.forcedStructures = levelObject.forcedStructures.AddToArray(new()
+				// 		{
+				// 			prefab = placer,
+				// 			parameters = new()
+				// 			{
+				// 				minMax = [new(Mathf.FloorToInt(2 * num * 0.35f), Mathf.FloorToInt(3.5f * num * 0.45f))],
+				// 				chance = [0.25f * num * 0.35f % 1f],
+				// 				prefab = GetProperArray(levelObject)
+				// 			}
+				// 		});
+				// 	}
+				// 	return;
+				// }
 				foreach (var levelObject in sco.GetCustomLevelObjects())
 				{
+					var machinesArray = GetProperArray(levelObject);
+					if (machinesArray.Length == 0) // It SHOULD have a length, otherwise this can be skipped.
+						continue;
+					levelObject.MarkAsNeverUnload();
+
 					switch (name)
 					{
 						default: break;
@@ -155,7 +160,7 @@ namespace CustomVendingMachines
 								{
 									minMax = [new(2, 5)],
 									chance = [0.5f],
-									prefab = GetProperArray(levelObject)
+									prefab = machinesArray
 								}
 							});
 							break;
@@ -168,7 +173,7 @@ namespace CustomVendingMachines
 								{
 									minMax = [new(4, 6)],
 									chance = [0.35f],
-									prefab = GetProperArray(levelObject)
+									prefab = machinesArray
 								}
 							});
 							break;
@@ -181,7 +186,7 @@ namespace CustomVendingMachines
 								{
 									minMax = [new(6, 9)],
 									chance = [0.65f],
-									prefab = GetProperArray(levelObject)
+									prefab = machinesArray
 								}
 							});
 							break;
@@ -194,7 +199,7 @@ namespace CustomVendingMachines
 								{
 									minMax = [new(7, 10)],
 									chance = [0.68f],
-									prefab = GetProperArray(levelObject)
+									prefab = machinesArray
 								}
 							});
 							break;
@@ -207,7 +212,7 @@ namespace CustomVendingMachines
 								{
 									minMax = [new(8, 9)],
 									chance = [0.72f],
-									prefab = GetProperArray(levelObject)
+									prefab = machinesArray
 								}
 							});
 							break;
@@ -220,7 +225,7 @@ namespace CustomVendingMachines
 								{
 									minMax = [new(4, 7)],
 									chance = [0.5f],
-									prefab = GetProperArray(levelObject)
+									prefab = machinesArray
 								}
 							});
 							break;
